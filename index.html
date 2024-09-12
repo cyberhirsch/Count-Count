@@ -3,48 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Word Count</title>
+    <title>PDF Word Counter</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        .container { margin: auto; width: 50%; text-align: center; }
-        input[type="file"] { display: block; margin: 10px auto; }
-        p { font-size: 1.2em; margin-top: 30px; }
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        #result {
+            margin-top: 20px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        #file-input {
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Upload a PDF to Count Words</h1>
-        <input type="file" id="pdfFileInput" accept=".pdf">
-        <p id="wordCount"></p>
-    </div>
+    <h1>PDF Word Counter</h1>
+    <input type="file" id="file-input" accept=".pdf">
+    <div id="result"></div>
 
-    <!-- Include the pdfjs library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfjs-dist/2.14.305/pdf.min.js"></script>
     <script>
-        document.getElementById('pdfFileInput').addEventListener('change', function(event) {
-            const file = event.target.files[0];
-            if (file && file.type === 'application/pdf') {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const pdfData = new Uint8Array(e.target.result);
-                    // Using PDF.js to load and process the PDF file
-                    pdfjsLib.getDocument(pdfData).promise.then((doc) => {
-                        let textContent = '';
-                        for (let i = 1; i <= doc.numPages; i++) {
-                            const page = await doc.getPage(i);
-                            const pageText = await page.getTextContent();
-                            textContent += pageText.items.map(item => item.str).join(' ') + ' ';
-                        }
-                        const wordCount = textContent.trim().split(/\s+/).length;
-                        document.getElementById('wordCount').innerText = `Word count: ${wordCount}`;
-                    }).catch((error) => {
-                        console.error('Error loading PDF:', error);
-                    });
-                };
-                reader.readAsArrayBuffer(file);
-            } else {
-                alert("Please upload a valid PDF file.");
+        // Ensure PDF.js is loaded
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.worker.min.js';
+
+        document.getElementById('file-input').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file.type !== 'application/pdf') {
+                alert('Please upload a PDF file.');
+                return;
             }
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const typedarray = new Uint8Array(event.target.result);
+
+                pdfjsLib.getDocument(typedarray).promise.then(function(pdf) {
+                    let numPages = pdf.numPages;
+                    let wordCount = 0;
+
+                    let loadPage = function(pageNum) {
+                        return pdf.getPage(pageNum).then(function(page) {
+                            return page.getTextContent().then(function(content) {
+                                wordCount += content.items
+                                    .map(item => item.str.trim())
+                                    .filter(str => str.length > 0)
+                                    .join(' ')
+                                    .split(/\s+/)
+                                    .length;
+
+                                if (pageNum < numPages) {
+                                    return loadPage(pageNum + 1);
+                                } else {
+                                    document.getElementById('result').textContent = `Word count: ${wordCount}`;
+                                }
+                            });
+                        });
+                    };
+
+                    loadPage(1);
+                });
+            };
+            reader.readAsArrayBuffer(file);
         });
     </script>
 </body>
