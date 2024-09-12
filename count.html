@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Word Count</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .container { margin: auto; width: 50%; text-align: center; }
+        input[type="file"] { display: block; margin: 10px auto; }
+        p { font-size: 1.2em; margin-top: 30px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Upload a PDF to Count Words</h1>
+        <input type="file" id="pdfFileInput" accept=".pdf">
+        <p id="wordCount"></p>
+    </div>
+
+    <!-- Include the pdfjs library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfjs-dist/2.14.305/pdf.min.js"></script>
+    <script>
+        document.getElementById('pdfFileInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file && file.type === 'application/pdf') {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const pdfData = new Uint8Array(e.target.result);
+                    // Using PDF.js to load and process the PDF file
+                    pdfjsLib.getDocument(pdfData).promise.then((doc) => {
+                        let textContent = '';
+                        for (let i = 1; i <= doc.numPages; i++) {
+                            const page = await doc.getPage(i);
+                            const pageText = await page.getTextContent();
+                            textContent += pageText.items.map(item => item.str).join(' ') + ' ';
+                        }
+                        const wordCount = textContent.trim().split(/\s+/).length;
+                        document.getElementById('wordCount').innerText = `Word count: ${wordCount}`;
+                    }).catch((error) => {
+                        console.error('Error loading PDF:', error);
+                    });
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                alert("Please upload a valid PDF file.");
+            }
+        });
+    </script>
+</body>
+</html>
