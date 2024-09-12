@@ -18,7 +18,7 @@
             font-size: 18px;
             font-weight: bold;
         }
-        #file-input {
+        #file-input, #count-button {
             margin-bottom: 20px;
         }
         .options {
@@ -28,6 +28,11 @@
             max-width: 200px;
             margin-top: 20px;
             display: none;
+        }
+        #count-button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -39,6 +44,7 @@
             <input type="checkbox" id="exclude-numbers-dates"> Exclude numbers and dates
         </label>
     </div>
+    <button id="count-button" disabled>Count Words</button>
     <div id="result"></div>
     <img id="count-image" src="Count_von_Count_kneeling.png" alt="Count von Count" />
 
@@ -46,27 +52,56 @@
         // Ensure PDF.js is loaded
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.worker.min.js';
 
+        let pdfFile = null;
+
         function countWords(text, excludeNumbersAndDates) {
-            // Remove extra spaces and trim
             text = text.replace(/\s+/g, ' ').trim();
 
             if (excludeNumbersAndDates) {
-                // Remove standalone numbers
                 text = text.replace(/\b\d+\b/g, '');
-                
-                // Remove common date formats
                 text = text.replace(/\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b/g, '');
                 text = text.replace(/\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+\d{4}\b/g, '');
             }
 
-            // Split by spaces and filter out empty strings
             return text.split(/\s+/).filter(word => word.length > 0).length;
         }
 
+        function processPage(pdf, pageNum, excludeNumbersAndDates) {
+            return pdf.getPage(pageNum).then(function(page) {
+                return page.getTextContent().then(function(content) {
+                    const pageText = content.items.map(item => item.str).join(' ');
+                    return countWords(pageText, excludeNumbersAndDates);
+                });
+            });
+        }
+
+        function countWordsInPDF(pdf, excludeNumbersAndDates) {
+            let wordCount = 0;
+            const pagePromises = [];
+
+            for (let i = 1; i <= pdf.numPages; i++) {
+                pagePromises.push(processPage(pdf, i, excludeNumbersAndDates));
+            }
+
+            return Promise.all(pagePromises).then(counts => {
+                return counts.reduce((total, count) => total + count, 0);
+            });
+        }
+
         document.getElementById('file-input').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file.type !== 'application/pdf') {
+            pdfFile = e.target.files[0];
+            if (pdfFile.type !== 'application/pdf') {
                 alert('Please upload a PDF file.');
+                pdfFile = null;
+                document.getElementById('count-button').disabled = true;
+            } else {
+                document.getElementById('count-button').disabled = false;
+            }
+        });
+
+        document.getElementById('count-button').addEventListener('click', function() {
+            if (!pdfFile) {
+                alert('Please upload a PDF file first.');
                 return;
             }
 
@@ -76,29 +111,13 @@
                 const excludeNumbersAndDates = document.getElementById('exclude-numbers-dates').checked;
 
                 pdfjsLib.getDocument(typedarray).promise.then(function(pdf) {
-                    let numPages = pdf.numPages;
-                    let wordCount = 0;
-
-                    let loadPage = function(pageNum) {
-                        return pdf.getPage(pageNum).then(function(page) {
-                            return page.getTextContent().then(function(content) {
-                                const pageText = content.items.map(item => item.str).join(' ');
-                                wordCount += countWords(pageText, excludeNumbersAndDates);
-
-                                if (pageNum < numPages) {
-                                    return loadPage(pageNum + 1);
-                                } else {
-                                    document.getElementById('result').textContent = `Word count: ${wordCount}`;
-                                    document.getElementById('count-image').style.display = 'inline-block';
-                                }
-                            });
-                        });
-                    };
-
-                    loadPage(1);
+                    countWordsInPDF(pdf, excludeNumbersAndDates).then(wordCount => {
+                        document.getElementById('result').textContent = `Word count: ${wordCount}`;
+                        document.getElementById('count-image').style.display = 'inline-block';
+                    });
                 });
             };
-            reader.readAsArrayBuffer(file);
+            reader.readAsArrayBuffer(pdfFile);
         });
     </script>
 </body>
